@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { generateBarcode } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +25,7 @@ export default function Inventory() {
   const [status, setStatus] = useState<"all" | "in" | "out">("all");
   const [category, setCategory] = useState("all");
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [newBarcode, setNewBarcode] = useState("");
   const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -121,7 +123,13 @@ export default function Inventory() {
             {items.length} items total, {checkedInCount} available
           </p>
         </div>
-        <Button onClick={() => setShowAddDialog(true)} data-testid="button-add-item">
+        <Button
+          onClick={() => {
+            setNewBarcode(generateBarcode());
+            setShowAddDialog(true);
+          }}
+          data-testid="button-add-item"
+        >
           <Plus className="h-4 w-4 mr-2" />
           Add Item
         </Button>
@@ -151,7 +159,7 @@ export default function Inventory() {
       <ItemRegistrationDialog
         open={showAddDialog}
         onOpenChange={setShowAddDialog}
-        barcode=""
+        barcode={newBarcode}
         onRegister={(item) => addMutation.mutate(item)}
       />
 
