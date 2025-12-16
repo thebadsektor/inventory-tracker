@@ -1,0 +1,190 @@
+Barcode-Based Inventory System
+High-Level Logic & Feature Overview
+1. Core System Idea
+
+Each inventory item is identified by a unique barcode.
+
+The system uses a single scan action to manage item status.
+
+Scan behavior is state-based:
+
+First scan → Check Out
+
+Second scan → Check In
+
+Repeated scans continue toggling the state
+
+This eliminates the need for separate “check in” and “check out” modes.
+
+2. Item State Model
+
+Each item has a simple, binary status:
+
+Checked In (available)
+
+Checked Out (in use / removed)
+
+The current state determines what action the next scan will perform.
+
+3. Scan Logic (Conceptual Flow)
+
+User scans a barcode
+
+System searches inventory records for that barcode
+
+One of two paths occurs:
+
+A. Barcode Exists in Records
+
+System reads the current item state
+
+If item is checked in → system checks it out
+
+If item is checked out → system checks it in
+
+Action is logged with timestamp (and optional user)
+
+B. Barcode Does NOT Exist in Records
+
+System prompts user to encode a new inventory item
+
+User may enter:
+
+Item name
+
+Category
+
+Description
+
+Initial status (default: checked in)
+
+New item is saved and becomes immediately scannable
+
+This allows the system to grow organically as new items are introduced.
+
+4. New Inventory Encoding Flow
+
+When an unknown barcode is scanned:
+
+System detects “barcode not found”
+
+User is offered options:
+
+Register new item
+
+Cancel scan
+
+Upon registration:
+
+Barcode is stored as unique identifier
+
+Item metadata is captured
+
+Item is added to inventory
+
+The scan that triggered registration may optionally:
+
+Count as the first check-out
+
+Or simply register the item without changing state
+
+5. Inventory Management Features
+
+View all inventory items
+
+View checked-in items only
+
+View checked-out items only
+
+Search by barcode or item name
+
+Manually edit item information
+
+Manually override item status (admin-level action)
+
+6. Scan History & Accountability
+
+Every scan generates a log entry
+
+Logs include:
+
+Barcode
+
+Action performed (check in / check out)
+
+Timestamp
+
+Optional user or location
+
+Enables:
+
+Usage tracking
+
+Loss investigation
+
+Activity auditing
+
+7. CSV Import / Export
+Import Capabilities
+
+Bulk add inventory items from CSV
+
+Update existing items using barcode as key
+
+Useful for initial system setup or migration
+
+Export Capabilities
+
+Export full inventory list
+
+Export checked-out items
+
+Export scan history for reporting
+
+8. Local Data Storage
+
+System uses a local database (e.g., SQLite)
+
+Benefits:
+
+No internet dependency
+
+Fast scan response
+
+Simple backups
+
+Database is the system’s single source of truth
+
+9. Error & Edge Case Handling
+
+Duplicate scans simply toggle state
+
+Rapid repeated scans may be rate-limited
+
+Deleted or invalid barcodes are rejected
+
+System prevents duplicate barcode registration
+
+10. Optional Enhancements (Non-Core)
+
+User authentication
+
+Item location tracking
+
+Multi-device synchronization
+
+Mobile scanning support
+
+Role-based permissions
+
+Photo attachment for items
+
+11. System Philosophy (Design Summary)
+
+One action: scan
+
+One rule: state determines behavior
+
+One source of truth: barcode
+
+Zero mode switching
