@@ -1,38 +1,45 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { ScanLine, ArrowRight } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { StatsCards } from "@/components/StatsCards";
 import { InventoryTable, type InventoryItem } from "@/components/InventoryTable";
 import { SearchFilter } from "@/components/SearchFilter";
 import { ScanHistory, type ScanLogEntry } from "@/components/ScanHistory";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-// todo: remove mock functionality
-const mockItems: InventoryItem[] = [
-  { id: "1", barcode: "123456789", name: "Dell Monitor 24\"", category: "Electronics", description: "", checkedIn: true },
-  { id: "2", barcode: "987654321", name: "Wireless Keyboard", category: "Electronics", description: "", checkedIn: false },
-  { id: "3", barcode: "456789123", name: "Standing Desk", category: "Furniture", description: "", checkedIn: true },
-  { id: "4", barcode: "789123456", name: "Cordless Drill", category: "Tools", description: "", checkedIn: false },
-  { id: "5", barcode: "321654987", name: "Stapler Set", category: "Office Supplies", description: "", checkedIn: true },
-];
-
-const mockLogs: ScanLogEntry[] = [
-  { id: "1", barcode: "123456789", itemName: "Dell Monitor 24\"", action: "checked_out", timestamp: new Date() },
-  { id: "2", barcode: "987654321", itemName: "Wireless Keyboard", action: "checked_in", timestamp: new Date(Date.now() - 1000 * 60 * 30) },
-  { id: "3", barcode: "456789123", itemName: "Standing Desk", action: "registered", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2) },
-];
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Dashboard() {
-  const [items] = useState<InventoryItem[]>(mockItems);
-  const [logs] = useState<ScanLogEntry[]>(mockLogs);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | "in" | "out">("all");
   const [category, setCategory] = useState("all");
 
-  const categories = Array.from(new Set(items.map((i) => i.category)));
-  const checkedInCount = items.filter((i) => i.checkedIn).length;
-  const checkedOutCount = items.filter((i) => !i.checkedIn).length;
+  const { data: stats, isLoading: statsLoading } = useQuery<{
+    totalItems: number;
+    checkedIn: number;
+    checkedOut: number;
+    recentScans: number;
+  }>({
+    queryKey: ["/api/stats"],
+  });
+
+  const { data: items = [], isLoading: itemsLoading } = useQuery<InventoryItem[]>({
+    queryKey: ["/api/items", { search, status, category }],
+  });
+
+  const { data: logs = [], isLoading: logsLoading } = useQuery<ScanLogEntry[]>({
+    queryKey: ["/api/logs"],
+    select: (data) =>
+      data.map((log: any) => ({
+        ...log,
+        timestamp: new Date(log.timestamp),
+      })),
+  });
+
+  const { data: categories = [] } = useQuery<string[]>({
+    queryKey: ["/api/categories"],
+  });
 
   const filteredItems = items.filter((item) => {
     const matchesSearch =
@@ -63,12 +70,20 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      <StatsCards
-        totalItems={items.length}
-        checkedIn={checkedInCount}
-        checkedOut={checkedOutCount}
-        recentScans={logs.length}
-      />
+      {statsLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-32" />
+          ))}
+        </div>
+      ) : (
+        <StatsCards
+          totalItems={stats?.totalItems ?? 0}
+          checkedIn={stats?.checkedIn ?? 0}
+          checkedOut={stats?.checkedOut ?? 0}
+          recentScans={stats?.recentScans ?? 0}
+        />
+      )}
 
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
@@ -89,7 +104,11 @@ export default function Dashboard() {
             onCategoryChange={setCategory}
             categories={categories}
           />
-          <InventoryTable items={filteredItems.slice(0, 5)} />
+          {itemsLoading ? (
+            <Skeleton className="h-64" />
+          ) : (
+            <InventoryTable items={filteredItems.slice(0, 5)} />
+          )}
         </div>
 
         <Card>
@@ -102,7 +121,11 @@ export default function Dashboard() {
             </Button>
           </CardHeader>
           <CardContent>
-            <ScanHistory logs={logs.slice(0, 5)} />
+            {logsLoading ? (
+              <Skeleton className="h-48" />
+            ) : (
+              <ScanHistory logs={logs.slice(0, 5)} />
+            )}
           </CardContent>
         </Card>
       </div>

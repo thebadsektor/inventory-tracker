@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Download } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { ScanHistory, type ScanLogEntry } from "@/components/ScanHistory";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Search } from "lucide-react";
 import {
   Select,
@@ -12,22 +14,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// todo: remove mock functionality
-const mockLogs: ScanLogEntry[] = [
-  { id: "1", barcode: "123456789", itemName: "Dell Monitor 24\"", action: "checked_out", timestamp: new Date() },
-  { id: "2", barcode: "987654321", itemName: "Wireless Keyboard", action: "checked_in", timestamp: new Date(Date.now() - 1000 * 60 * 30) },
-  { id: "3", barcode: "456789123", itemName: "Standing Desk", action: "registered", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2) },
-  { id: "4", barcode: "789123456", itemName: "Cordless Drill", action: "checked_out", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5) },
-  { id: "5", barcode: "321654987", itemName: "Stapler Set", action: "checked_in", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24) },
-  { id: "6", barcode: "654987321", itemName: "Ergonomic Chair", action: "checked_out", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24) },
-  { id: "7", barcode: "147258369", itemName: "USB Hub 7-Port", action: "registered", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2) },
-  { id: "8", barcode: "369258147", itemName: "Whiteboard Markers", action: "checked_in", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3) },
-];
-
 export default function History() {
-  const [logs] = useState<ScanLogEntry[]>(mockLogs);
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState<"all" | "checked_in" | "checked_out" | "registered">("all");
+
+  const { data: logs = [], isLoading } = useQuery<ScanLogEntry[]>({
+    queryKey: ["/api/logs"],
+    select: (data) =>
+      data.map((log: any) => ({
+        ...log,
+        timestamp: new Date(log.timestamp),
+      })),
+  });
 
   const filteredLogs = logs.filter((log) => {
     const matchesSearch =
@@ -38,7 +36,7 @@ export default function History() {
   });
 
   const handleExport = () => {
-    console.log("Exporting history...");
+    window.location.href = "/api/export/logs";
   };
 
   return (
@@ -81,7 +79,11 @@ export default function History() {
         </Select>
       </div>
 
-      <ScanHistory logs={filteredLogs} />
+      {isLoading ? (
+        <Skeleton className="h-64" />
+      ) : (
+        <ScanHistory logs={filteredLogs} />
+      )}
     </div>
   );
 }

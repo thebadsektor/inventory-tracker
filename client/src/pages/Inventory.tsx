@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { InventoryTable, type InventoryItem } from "@/components/InventoryTable";
 import { SearchFilter } from "@/components/SearchFilter";
 import { ItemRegistrationDialog } from "@/components/ItemRegistrationDialog";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,28 +19,22 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-// todo: remove mock functionality
-const initialItems: InventoryItem[] = [
-  { id: "1", barcode: "123456789", name: "Dell Monitor 24\"", category: "Electronics", description: "", checkedIn: true },
-  { id: "2", barcode: "987654321", name: "Wireless Keyboard", category: "Electronics", description: "", checkedIn: false },
-  { id: "3", barcode: "456789123", name: "Standing Desk", category: "Furniture", description: "", checkedIn: true },
-  { id: "4", barcode: "789123456", name: "Cordless Drill", category: "Tools", description: "", checkedIn: false },
-  { id: "5", barcode: "321654987", name: "Stapler Set", category: "Office Supplies", description: "", checkedIn: true },
-  { id: "6", barcode: "654987321", name: "Ergonomic Chair", category: "Furniture", description: "", checkedIn: true },
-  { id: "7", barcode: "147258369", name: "USB Hub 7-Port", category: "Electronics", description: "", checkedIn: false },
-  { id: "8", barcode: "369258147", name: "Whiteboard Markers", category: "Office Supplies", description: "", checkedIn: true },
-];
-
 export default function Inventory() {
-  const [items, setItems] = useState<InventoryItem[]>(initialItems);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | "in" | "out">("all");
   const [category, setCategory] = useState("all");
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const categories = Array.from(new Set(items.map((i) => i.category)));
+  const { data: items = [], isLoading } = useQuery<InventoryItem[]>({
+    queryKey: ["/api/items"],
+  });
+
+  const { data: categories = [] } = useQuery<string[]>({
+    queryKey: ["/api/categories"],
+  });
 
   const filteredItems = items.filter((item) => {
     const matchesSearch =
@@ -51,50 +48,69 @@ export default function Inventory() {
     return matchesSearch && matchesStatus && matchesCategory;
   });
 
-  const handleToggleStatus = (item: InventoryItem) => {
-    setItems((prev) =>
-      prev.map((i) =>
-        i.id === item.id ? { ...i, checkedIn: !i.checkedIn } : i
-      )
-    );
-    toast({
-      title: item.checkedIn ? "Checked Out" : "Checked In",
-      description: `${item.name} status updated.`,
-    });
-  };
+  const toggleMutation = useMutation({
+    mutationFn: async (item: InventoryItem) => {
+      const response = await apiRequest("PATCH", `/api/items/${item.id}`, {
+        checkedIn: !item.checkedIn,
+      });
+      return response.json();
+    },
+    onSuccess: (data, item) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/items"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      toast({
+        title: item.checkedIn ? "Checked Out" : "Checked In",
+        description: `${item.name} status updated.`,
+      });
+    },
+  });
 
-  const handleDelete = (item: InventoryItem) => {
-    setItemToDelete(item);
-  };
-
-  const confirmDelete = () => {
-    if (itemToDelete) {
-      setItems((prev) => prev.filter((i) => i.id !== itemToDelete.id));
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/items/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/items"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
       toast({
         title: "Item Deleted",
-        description: `${itemToDelete.name} has been removed.`,
+        description: `${itemToDelete?.name} has been removed.`,
       });
       setItemToDelete(null);
-    }
-  };
+    },
+  });
 
-  const handleAddItem = (item: {
-    barcode: string;
-    name: string;
-    category: string;
-    description: string;
-    checkedIn: boolean;
-  }) => {
-    const newItem: InventoryItem = {
-      id: Date.now().toString(),
-      ...item,
-    };
-    setItems((prev) => [...prev, newItem]);
-    toast({
-      title: "Item Added",
-      description: `${item.name} has been added to inventory.`,
-    });
-  };
+  const addMutation = useMutation({
+    mutationFn: async (item: {
+      barcode: string;
+      name: string;
+      category: string;
+      description: string;
+      checkedIn: boolean;
+    }) => {
+      const response = await apiRequest("POST", "/api/items", item);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/items"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      toast({
+        title: "Item Added",
+        description: `${data.name} has been added to inventory.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to Add Item",
+        description: "Could not add the item. The barcode may already exist.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const checkedInCount = items.filter((i) => i.checkedIn).length;
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -102,7 +118,7 @@ export default function Inventory() {
         <div>
           <h1 className="text-2xl font-semibold">Inventory</h1>
           <p className="text-sm text-muted-foreground">
-            {items.length} items total, {items.filter((i) => i.checkedIn).length} available
+            {items.length} items total, {checkedInCount} available
           </p>
         </div>
         <Button onClick={() => setShowAddDialog(true)} data-testid="button-add-item">
@@ -121,18 +137,22 @@ export default function Inventory() {
         categories={categories}
       />
 
-      <InventoryTable
-        items={filteredItems}
-        onEdit={(item) => console.log("Edit:", item)}
-        onDelete={handleDelete}
-        onToggleStatus={handleToggleStatus}
-      />
+      {isLoading ? (
+        <Skeleton className="h-64" />
+      ) : (
+        <InventoryTable
+          items={filteredItems}
+          onEdit={(item) => console.log("Edit:", item)}
+          onDelete={(item) => setItemToDelete(item)}
+          onToggleStatus={(item) => toggleMutation.mutate(item)}
+        />
+      )}
 
       <ItemRegistrationDialog
         open={showAddDialog}
         onOpenChange={setShowAddDialog}
         barcode=""
-        onRegister={handleAddItem}
+        onRegister={(item) => addMutation.mutate(item)}
       />
 
       <AlertDialog open={!!itemToDelete} onOpenChange={() => setItemToDelete(null)}>
@@ -145,7 +165,10 @@ export default function Inventory() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} data-testid="button-confirm-delete">
+            <AlertDialogAction
+              onClick={() => itemToDelete && deleteMutation.mutate(itemToDelete.id)}
+              data-testid="button-confirm-delete"
+            >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
